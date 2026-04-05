@@ -1,4 +1,4 @@
-name: ESP-IDF Build
+name: ESP-IDF Build + Protocol Check
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  build:
+  firmware-build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,3 +29,33 @@ jobs:
             build/*.bin
             build/partition_table/*.bin
           retention-days: 30
+
+  uplink-protocol:
+    runs-on: ubuntu-latest
+    name: 验证固件上报协议与服务端兼容性
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout ruview-server
+        uses: actions/checkout@v4
+        with:
+          repository: hcwang/joycode-ruview-server
+          path: ruview-server
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install server dependencies
+        run: pip install -r ruview-server/requirements.txt websockets
+
+      - name: Start ruview-server
+        run: |
+          cd ruview-server
+          uvicorn app:app --host 0.0.0.0 --port 8080 &
+          for i in $(seq 1 10); do
+            curl -sf http://localhost:8080/health && break || sleep 1
+          done
+
+      - name: Run firmware uplink protocol check
+        run: python scripts/firmware_protocol_check.py
